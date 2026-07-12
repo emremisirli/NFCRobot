@@ -43,4 +43,5 @@ public class SerialManager {
 
         return bytesWritten > 0;
     }
+    // comment line
 }
