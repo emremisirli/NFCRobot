@@ -1,9 +1,0 @@
-target/
-.idea/
-*.iml
-.settings/
-.classpath
-.project
-.DS_Store
-*.log
-robotik_nfc_log.txt
