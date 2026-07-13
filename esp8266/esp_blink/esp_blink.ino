@@ -17,20 +17,17 @@ const float txPowerDbm = 16.0;
 WiFiServer server(5000);
 
 void setup() {
-  Serial.begin(115200); // UART0 TX0=GPIO1 ve RX0=GPIO3 BASLAR
+  Serial.begin(115200); // UART0 TX0=GPIO1 ve RX0=GPIO3 ile BASLAR (USB-seri hatti)
+  Serial.println("Boot, USB-seri hatti uzerinden");
+  Serial.flush(); // swap oncesi mesaji GPIO1/3 uzerinden tamamen gonder
 
+  Serial.swap(); // UART0'i GPIO15 -> TXD0 ve GPIO13 -> RXD0'a tasir (STM32 hatti)
   /*
-  Serial.swap() sorun çıkardı, bakılmalı. Su anda debug/programlama ile uart pinleri cakismada, STM32'ye
-  emir verilirken gercek zamanli programlama debug atamayiz.
+  Swap sonrasi Serial, STM32'nin komut hatti olur; debug metni buraya YAZILMAZ,
+  aksi halde metin icindeki '0'/'1' karakterleri STM32'de yanlis komut sanilir.
+  Debug icin GPIO2 (Serial1, TX-only) kullanilir.
   */
-
-  // Serial.swap(); // UART GPIO5 -> TX ve GPIO13 -> RX Olarak degistirmek
-
-  /*
-  GPIO15, ESP8266'nın boot mode pinidir. (boot sırasında LOW olmalı).
-  STM32 tarafında bu pime bağlı hattın boot anında yanlışlıkla HIGH
-  cekmediginden emin olun, flash/boot moduna gecisler sorun yaratabilir.
-  */
+  Serial1.begin(115200);
 
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH); // Amica'da HIGH = LED sonuk (baslangic durumu)
@@ -50,7 +47,7 @@ void setup() {
   WiFi.setOutputPower(txPowerDbm); // 16 dBm, brown-out riskini azaltir
 
   server.begin();
-  Serial.println("TCP sunucu port 5000 START");
+  Serial1.println("TCP sunucu port 5000 START");
 }
 
 void handleCommand(WiFiClient& client, String cmd) {
@@ -58,9 +55,11 @@ void handleCommand(WiFiClient& client, String cmd) {
 
   if (cmd == "1") {
     digitalWrite(LED_BUILTIN, LOW); // Amica'da LOW = LED yanik
+    Serial.write('1'); // STM32'ye ilet (USART1 uzerinden PA4 LED ac)
     client.println("OK LED ON");
   } else if (cmd == "0") {
     digitalWrite(LED_BUILTIN, HIGH);
+    Serial.write('0'); // STM32'ye ilet (USART1 uzerinden PA4 LED kapat)
     client.println("OK LED OFF");
   } else if (cmd == "PING") {
     client.println("PONG"); // masaustu tarafi baglantiyi canli tutmak/dogrulamak icin kullanir
@@ -73,7 +72,7 @@ void loop() {
   WiFiClient client = server.accept();
 
   if (client) {
-    Serial.println("Client baglandi");
+    Serial1.println("Client baglandi");
     client.keepAlive(10, 4, 3); // 10sn idle sonrasi 4sn arayla 3 probe; cevap yoksa baglanti vefad
     while (client.connected()) {
       if (client.available()) {
@@ -83,7 +82,7 @@ void loop() {
       yield(); // watchdog'u besle, arka plan wifi islemlerine izin ver
     }
     client.stop();
-    Serial.println("Client ayrildi");
+    Serial1.println("Client ayrildi");
   }
 
   yield();
