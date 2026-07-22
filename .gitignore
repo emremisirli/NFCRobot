@@ -7,3 +7,7 @@ target/
 .DS_Store
 *.log
 robotik_nfc_log.txt
+
+# STM32CubeIDE build output
+**/Debug/
+**/Release/

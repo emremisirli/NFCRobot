@@ -1,0 +1,5 @@
+1783939296059	Delete resource 'stm32_uart_blinker'
+1783939451681	Delete resource 'stm32_register_blink/Drivers/STM32F1xx_HAL_Driver'
+1783939459416	Delete resource 'stm32_register_blink/Core/Inc/stm32f1xx_hal_conf.h'
+1783939466014	Delete resource 'stm32_register_blink/Core/Src/stm32f1xx_hal_msp.c'
+1783946963951	Delete resource 'stm32_register_blink'
