@@ -201,4 +201,28 @@ public class EspClientManager {
             }
         }).start();
     }
+
+    public void sendServoCommand(String angle, ConnectionCallback callback) {
+        if (!isConnected()) {
+            logManager.logEkle("Hata: Komut gönderilemedi! ESP8266 bağlantısı yok.");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                String cmd = "SERVO" + angle;
+                logManager.logEkle("ESP8266'ya servo komutu gönderiliyor -> " + cmd);
+                String response = sendAndReceive(cmd);
+                logManager.logEkle("ESP8266'dan yanıt geldi -> " + response);
+                Platform.runLater(() -> callback.onResponseReceived(response));
+            } catch (Exception e) {
+                logManager.logEkle("Hata: ESP8266 servo komutu gönderme hatası. " + e.getMessage());
+                handleDisconnection("Bağlantı Koptu");
+                Platform.runLater(() -> {
+                    callback.onResponseReceived("HATA: " + e.getMessage());
+                    callback.onConnectionStateChanged(false, "Bağlantı Koptu");
+                });
+            }
+        }).start();
+    }
 }

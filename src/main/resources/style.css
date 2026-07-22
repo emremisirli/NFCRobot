@@ -259,3 +259,46 @@
 .led-online {
     -fx-effect: dropshadow(three-pass-box, rgba(16, 185, 129, 0.6), 8, 0, 0, 0);
 }
+
+.btn-blue-active {
+    -fx-background-color: #0369a1;
+    -fx-translate-y: 3px;
+    -fx-effect: dropshadow(three-pass-box, rgba(2, 132, 199, 0.8), 20, 0, 0, 0);
+    -fx-border-color: #38bdf8;
+    -fx-border-width: 2px;
+    -fx-border-radius: 8px;
+    -fx-text-fill: #f8fafc;
+}
+
+.gauge-background {
+    -fx-fill: transparent;
+    -fx-stroke: #334155;
+    -fx-stroke-width: 12;
+    -fx-stroke-line-cap: round;
+}
+
+.gauge-value-arc {
+    -fx-fill: transparent;
+    -fx-stroke: linear-gradient(to right, #0284c7, #38bdf8);
+    -fx-stroke-width: 12;
+    -fx-stroke-line-cap: round;
+}
+
+.gauge-needle {
+    -fx-stroke: #ef4444;
+    -fx-stroke-width: 4;
+    -fx-stroke-line-cap: round;
+}
+
+.gauge-center-pin {
+    -fx-fill: #f8fafc;
+    -fx-stroke: #1e293b;
+    -fx-stroke-width: 2;
+}
+
+.gauge-tick-label {
+    -fx-fill: #94a3b8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+

@@ -8,24 +8,13 @@ import javafx.geometry.Pos;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.Circle;
+import javafx.scene.shape.*;
 import javafx.util.Duration;
 import java.time.format.DateTimeFormatter;
 
 public class UIBuilder {
 
-    private SerialManager serialManager;
     private LogManager logManager;
-    private CommandManager commandManager;
-
-    private Button ileriButton;
-    private Button solButton;
-    private Button sagButton;
-    private Button geriButton;
-    private Button homeButton;
-
-    private ToggleGroup stepGroup;
-
     private TextArea logArea;
 
     private Label statusLabel;
@@ -37,44 +26,44 @@ public class UIBuilder {
     private TextField espPortField;
     private Button espConnectButton;
     private Button espDisconnectButton;
-    private Button ledOnButton;
-    private Button ledOffButton;
     private Label espStatusLabel;
     private Label espLastCheckLabel;
     private Circle espConnectionLed;
     private java.time.LocalDateTime lastSuccessfulCheckTime = null;
     private Timeline lastCheckTimeline;
 
-    // Manuel kontrol paneli bileşenleri (WiFi bağlantısına bağlı)
-    private VBox manualControlPanelRef;
-    private Label wifiWarningLabel;
-    private GridPane dpadRef;
-    private HBox radioRowRef;
+    // Servo Kontrol Bileşenleri
+    private Button btnServo0;
+    private Button btnServo90;
+    private Button btnServo180;
+    private Arc dialBackground;
+    private Arc valueArc;
+    private Line needle;
+    private Circle centerPin;
+    private Label angleValueLabel;
+    private Label servoWarningLabel;
+    private VBox servoControlPanelRef;
 
     public BorderPane build() {
         BorderPane root = new BorderPane();
         root.getStyleClass().add("root");
 
-        // Initialize Managers
-        serialManager = new SerialManager();
-
         VBox mainContainer = new VBox(15);
         mainContainer.setPadding(new Insets(15));
 
-        VBox manualControlPanel = createManualControlPanel();
-        manualControlPanelRef = manualControlPanel;
         VBox espControlPanel = createEspControlPanel();
+        VBox servoControlPanel = createServoControlPanel();
 
-        manualControlPanel.setPrefWidth(520);
         espControlPanel.setPrefWidth(520);
+        servoControlPanel.setPrefWidth(520);
 
-        HBox.setHgrow(manualControlPanel, Priority.ALWAYS);
         HBox.setHgrow(espControlPanel, Priority.ALWAYS);
+        HBox.setHgrow(servoControlPanel, Priority.ALWAYS);
 
         HBox topRow = new HBox(15);
         topRow.getChildren().addAll(
-                manualControlPanel,
-                espControlPanel
+                espControlPanel,
+                servoControlPanel
         );
 
         mainContainer.getChildren().addAll(topRow, createLogPanel());
@@ -84,47 +73,45 @@ public class UIBuilder {
         root.setCenter(mainContainer);
         root.setBottom(createStatusBar());
 
-        // Initialize logManager and commandManager once logArea is created
+        // LogManager ve EspClientManager Başlatma
         logManager = new LogManager(logArea);
-        commandManager = new CommandManager(serialManager, logManager);
         espClientManager = new EspClientManager(logManager);
 
-        // Initialize timeline for updating last check elapsed time
+        // Son kontrol zamanını güncelleyen timeline
         lastCheckTimeline = new Timeline(new KeyFrame(Duration.seconds(1), event -> {
             refreshLastCheckLabel();
         }));
         lastCheckTimeline.setCycleCount(Timeline.INDEFINITE);
         lastCheckTimeline.play();
 
-        // Bind events
-        bindEvents();
+        // Olay bağlamaları
         bindEspEvents();
         updateEspControlStates(false, false, "Bağlantı Yok");
-        updateManualControlStates(false);
 
-        // Setup Keyboard Shortcuts when scene is loaded
+        // Sahne yüklendiğinde Klavye Kısayollarını tanımla
         root.sceneProperty().addListener((observable, oldScene, newScene) -> {
             if (newScene != null) {
                 newScene.setOnKeyPressed(event -> {
                     switch (event.getCode()) {
-                        case UP:
-                            ileriButton.fire();
+                        case DIGIT1:
+                        case NUMPAD1:
+                            if (btnServo0 != null && !btnServo0.isDisable()) {
+                                btnServo0.fire();
+                            }
                             event.consume();
                             break;
-                        case DOWN:
-                            geriButton.fire();
+                        case DIGIT2:
+                        case NUMPAD2:
+                            if (btnServo90 != null && !btnServo90.isDisable()) {
+                                btnServo90.fire();
+                            }
                             event.consume();
                             break;
-                        case LEFT:
-                            solButton.fire();
-                            event.consume();
-                            break;
-                        case RIGHT:
-                            sagButton.fire();
-                            event.consume();
-                            break;
-                        case H:
-                            homeButton.fire();
+                        case DIGIT3:
+                        case NUMPAD3:
+                            if (btnServo180 != null && !btnServo180.isDisable()) {
+                                btnServo180.fire();
+                            }
                             event.consume();
                             break;
                         default:
@@ -168,60 +155,192 @@ public class UIBuilder {
         return header;
     }
 
-    private VBox createManualControlPanel() {
+    private VBox createEspControlPanel() {
         VBox frame = createCard();
-        frame.setPrefWidth(520);
 
-        Label title = createTitle("MANUEL MOTOR KONTROLÜ (DPAD)");
+        Label title = createTitle("ESP8266 BAĞLANTI AYARLARI");
 
-        // WiFi bağlantısı uyarı etiketi
-        wifiWarningLabel = new Label("⚠ WiFi bağlantısı gerekli");
-        wifiWarningLabel.setStyle("-fx-text-fill: #f59e0b; -fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 4 10 4 10; -fx-background-color: rgba(245,158,11,0.1); -fx-background-radius: 6; -fx-border-color: #f59e0b; -fx-border-radius: 6; -fx-border-width: 1;");
-        wifiWarningLabel.setAlignment(Pos.CENTER);
-        wifiWarningLabel.setMaxWidth(Double.MAX_VALUE);
+        // IP ve Port Giriş Alanları
+        espIpField = new TextField("192.168.2.100");
+        espIpField.setPromptText("IP Adresi");
+        HBox.setHgrow(espIpField, Priority.ALWAYS);
+        espIpField.setMaxWidth(Double.MAX_VALUE);
 
-        GridPane dpad = new GridPane();
-        dpad.setHgap(10);
-        dpad.setVgap(10);
-        dpad.setAlignment(Pos.CENTER);
-        dpadRef = dpad;
+        espPortField = new TextField("5000");
+        espPortField.setPromptText("Port");
+        espPortField.setPrefWidth(80);
 
-        ileriButton = createDpadButton("▲ İLERİ", Theme.DARK_BUTTON);
-        solButton = createDpadButton("◀ SOL", Theme.DARK_BUTTON);
-        sagButton = createDpadButton("SAĞ ▶", Theme.DARK_BUTTON);
-        geriButton = createDpadButton("▼ GERİ", Theme.DARK_BUTTON);
-        homeButton = createDpadButton("⌂ HOME", Theme.ORANGE);
+        HBox ipPortRow = new HBox(10, espIpField, espPortField);
+        ipPortRow.setAlignment(Pos.CENTER_LEFT);
 
-        dpad.add(ileriButton, 1, 0);
-        dpad.add(solButton, 0, 1);
-        dpad.add(homeButton, 1, 1);
-        dpad.add(sagButton, 2, 1);
-        dpad.add(geriButton, 1, 2);
+        // Bağlantı Butonları
+        espConnectButton = createButton("WIFI BAĞLAN", Theme.BLUE);
+        espDisconnectButton = createButton("BAĞLANTIYI KES", Theme.RED);
+        HBox.setHgrow(espConnectButton, Priority.ALWAYS);
+        HBox.setHgrow(espDisconnectButton, Priority.ALWAYS);
+        espConnectButton.setMaxWidth(Double.MAX_VALUE);
+        espDisconnectButton.setMaxWidth(Double.MAX_VALUE);
 
-        Label stepLabel = createSmallLabel("Adım Hassasiyeti");
+        HBox connectionButtonRow = new HBox(10, espConnectButton, espDisconnectButton);
+        connectionButtonRow.setAlignment(Pos.CENTER);
 
-        HBox radioRow = new HBox(15);
-        radioRow.setAlignment(Pos.CENTER);
-        radioRowRef = radioRow;
+        // Bağlantı Durumu Göstergesi
+        espConnectionLed = new Circle(7);
+        espConnectionLed.setFill(Color.web("#ef4444"));
+        espConnectionLed.getStyleClass().add("led-offline");
 
-        stepGroup = new ToggleGroup();
+        espStatusLabel = new Label("Durum: Bağlantı Yok");
+        espStatusLabel.setStyle("-fx-text-fill: #cbd5e1; -fx-font-size: 13px;");
 
-        String[] steps = {"1mm", "5mm", "10mm", "50mm"};
+        espLastCheckLabel = new Label("");
+        espLastCheckLabel.setStyle("-fx-text-fill: #64748b; -fx-font-size: 12px;");
 
-        for (String step : steps) {
-            RadioButton rb = new RadioButton(step);
-            rb.setToggleGroup(stepGroup);
-            rb.getStyleClass().add("radio-button");
-            if (step.equals("5mm")) rb.setSelected(true);
-            radioRow.getChildren().add(rb);
-        }
+        Region statusSpacer = new Region();
+        HBox.setHgrow(statusSpacer, Priority.ALWAYS);
 
-        frame.getChildren().addAll(title, wifiWarningLabel, dpad, stepLabel, radioRow);
+        HBox statusRow = new HBox(8, espConnectionLed, espStatusLabel, statusSpacer, espLastCheckLabel);
+        statusRow.setAlignment(Pos.CENTER_LEFT);
+
+        frame.getChildren().addAll(
+                title,
+                createSmallLabel("ESP8266 IP Adresi ve Port"),
+                ipPortRow,
+                connectionButtonRow,
+                statusRow
+        );
 
         return frame;
     }
 
+    private VBox createServoControlPanel() {
+        VBox frame = createCard();
+        servoControlPanelRef = frame;
 
+        Label title = createTitle("SERVO MOTOR KONTROLÜ");
+
+        // WiFi bağlantısı uyarı etiketi
+        servoWarningLabel = new Label("⚠ WiFi bağlantısı gerekli");
+        servoWarningLabel.setStyle("-fx-text-fill: #f59e0b; -fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 4 10 4 10; -fx-background-color: rgba(245,158,11,0.1); -fx-background-radius: 6; -fx-border-color: #f59e0b; -fx-border-radius: 6; -fx-border-width: 1;");
+        servoWarningLabel.setAlignment(Pos.CENTER);
+        servoWarningLabel.setMaxWidth(Double.MAX_VALUE);
+
+        // Grafiksel Açı Kadranı
+        Pane gaugePane = new Pane();
+        gaugePane.setPrefSize(150, 95);
+        gaugePane.setMaxSize(150, 95);
+
+        dialBackground = new Arc(75, 80, 65, 65, 180, -180);
+        dialBackground.getStyleClass().add("gauge-background");
+
+        valueArc = new Arc(75, 80, 65, 65, 180, 0);
+        valueArc.getStyleClass().add("gauge-value-arc");
+
+        needle = new Line(75, 80, 25, 80);
+        needle.getStyleClass().add("gauge-needle");
+
+        centerPin = new Circle(75, 80, 8);
+        centerPin.getStyleClass().add("gauge-center-pin");
+
+        Label label0 = new Label("0°");
+        label0.getStyleClass().add("gauge-tick-label");
+        label0.setLayoutX(3);
+        label0.setLayoutY(75);
+
+        Label label90 = new Label("90°");
+        label90.getStyleClass().add("gauge-tick-label");
+        label90.setLayoutX(65);
+        label90.setLayoutY(3);
+
+        Label label180 = new Label("180°");
+        label180.getStyleClass().add("gauge-tick-label");
+        label180.setLayoutX(128);
+        label180.setLayoutY(75);
+
+        gaugePane.getChildren().addAll(dialBackground, valueArc, needle, centerPin, label0, label90, label180);
+
+        angleValueLabel = new Label("90°");
+        angleValueLabel.setStyle("-fx-text-fill: #38bdf8; -fx-font-size: 18px; -fx-font-weight: bold;");
+
+        VBox gaugeBox = new VBox(5, gaugePane, angleValueLabel);
+        gaugeBox.setAlignment(Pos.CENTER);
+
+        // Açı Butonları
+        btnServo0 = createButton("0° - Başlangıç", Theme.DARK_BUTTON);
+        btnServo90 = createButton("90° - Dikey", Theme.DARK_BUTTON);
+        btnServo180 = createButton("180° - Bitiş", Theme.DARK_BUTTON);
+
+        btnServo0.setPrefWidth(125);
+        btnServo90.setPrefWidth(125);
+        btnServo180.setPrefWidth(125);
+
+        HBox servoButtonsRow = new HBox(10, btnServo0, btnServo90, btnServo180);
+        servoButtonsRow.setAlignment(Pos.CENTER);
+
+        frame.getChildren().addAll(
+                title,
+                servoWarningLabel,
+                gaugeBox,
+                createSmallLabel("Açı Seçimi"),
+                servoButtonsRow
+        );
+
+        // Varsayılan gösterge açısını ayarla
+        updateNeedle(90);
+
+        return frame;
+    }
+
+    private void updateNeedle(double angle) {
+        double rad = Math.toRadians(angle);
+        double r = 50; // İbre yarıçapı
+        double centerX = 75;
+        double centerY = 80;
+        double endX = centerX - r * Math.cos(rad);
+        double endY = centerY - r * Math.sin(rad);
+        needle.setEndX(endX);
+        needle.setEndY(endY);
+        valueArc.setLength(-angle);
+        angleValueLabel.setText(String.format("%.0f°", angle));
+    }
+
+    private void updateServoButtonActiveState(double angle) {
+        // Tüm butonları varsayılan koyu temaya sıfırla
+        btnServo0.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+        btnServo90.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+        btnServo180.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+
+        btnServo0.getStyleClass().add("btn-dark");
+        btnServo90.getStyleClass().add("btn-dark");
+        btnServo180.getStyleClass().add("btn-dark");
+
+        // Seçilen butona aktif sınıfını uygula
+        if (angle == 0) {
+            btnServo0.getStyleClass().remove("btn-dark");
+            btnServo0.getStyleClass().add("btn-blue-active");
+        } else if (angle == 90) {
+            btnServo90.getStyleClass().remove("btn-dark");
+            btnServo90.getStyleClass().add("btn-blue-active");
+        } else if (angle == 180) {
+            btnServo180.getStyleClass().remove("btn-dark");
+            btnServo180.getStyleClass().add("btn-blue-active");
+        }
+    }
+
+    private void resetServoButtons() {
+        btnServo0.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+        btnServo90.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+        btnServo180.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+
+        btnServo0.getStyleClass().add("btn-dark");
+        btnServo90.getStyleClass().add("btn-dark");
+        btnServo180.getStyleClass().add("btn-dark");
+    }
+
+    private void setServoButtonsDisable(boolean disable) {
+        btnServo0.setDisable(disable);
+        btnServo90.setDisable(disable);
+        btnServo180.setDisable(disable);
+    }
 
     private VBox createLogPanel() {
         VBox frame = createCard();
@@ -281,134 +400,6 @@ public class UIBuilder {
         return statusBar;
     }
 
-    private void bindEvents() {
-        // DPAD click events
-        ileriButton.setOnAction(e -> commandManager.sendMoveCommand("ILERI", getSelectedStepSize()));
-        geriButton.setOnAction(e -> commandManager.sendMoveCommand("GERI", getSelectedStepSize()));
-        solButton.setOnAction(e -> commandManager.sendMoveCommand("SOL", getSelectedStepSize()));
-        sagButton.setOnAction(e -> commandManager.sendMoveCommand("SAG", getSelectedStepSize()));
-        homeButton.setOnAction(e -> commandManager.sendHomeCommand());
-    }
-
-    private int getSelectedStepSize() {
-        if (stepGroup.getSelectedToggle() != null) {
-            RadioButton rb = (RadioButton) stepGroup.getSelectedToggle();
-            try {
-                return Integer.parseInt(rb.getText().replace("mm", ""));
-            } catch (NumberFormatException e) {
-                return 5;
-            }
-        }
-        return 5;
-    }
-
-
-    private VBox createCard() {
-        VBox frame = new VBox(15);
-        frame.setPadding(new Insets(20));
-        frame.setAlignment(Pos.CENTER);
-        frame.getStyleClass().add("card");
-        return frame;
-    }
-
-    private Label createTitle(String text) {
-        Label label = new Label(text);
-        label.getStyleClass().add("title");
-        return label;
-    }
-
-    private Label createSmallLabel(String text) {
-        Label label = new Label(text);
-        label.getStyleClass().add("label-small");
-        return label;
-    }
-
-    private Button createButton(String text, String colorClass) {
-        Button button = new Button(text);
-        button.getStyleClass().addAll("button", colorClass);
-        button.setPrefWidth(170);
-        button.setPrefHeight(42);
-        return button;
-    }
-
-    private Button createDpadButton(String text, String colorClass) {
-        Button button = new Button(text);
-        button.getStyleClass().addAll("button", colorClass);
-        button.setPrefWidth(90);
-        button.setPrefHeight(40);
-        return button;
-    }
-
-    private VBox createEspControlPanel() {
-        VBox frame = createCard();
-
-        Label title = createTitle("ESP8266 WIFI LED KONTROLÜ");
-
-        // IP and Port inputs
-        espIpField = new TextField("192.168.2.100");
-        espIpField.setPromptText("IP Adresi");
-        HBox.setHgrow(espIpField, Priority.ALWAYS);
-        espIpField.setMaxWidth(Double.MAX_VALUE);
-
-        espPortField = new TextField("5000");
-        espPortField.setPromptText("Port");
-        espPortField.setPrefWidth(80);
-
-        HBox ipPortRow = new HBox(10, espIpField, espPortField);
-        ipPortRow.setAlignment(Pos.CENTER_LEFT);
-
-        // Connection Buttons
-        espConnectButton = createButton("WIFI BAĞLAN", Theme.BLUE);
-        espDisconnectButton = createButton("BAĞLANTIYI KES", Theme.RED);
-        HBox.setHgrow(espConnectButton, Priority.ALWAYS);
-        HBox.setHgrow(espDisconnectButton, Priority.ALWAYS);
-        espConnectButton.setMaxWidth(Double.MAX_VALUE);
-        espDisconnectButton.setMaxWidth(Double.MAX_VALUE);
-
-        HBox connectionButtonRow = new HBox(10, espConnectButton, espDisconnectButton);
-        connectionButtonRow.setAlignment(Pos.CENTER);
-
-        // LED Action Buttons
-        ledOnButton = createButton("LED YAK (ON)", Theme.GREEN);
-        ledOffButton = createButton("LED SÖNDÜR (OFF)", Theme.ORANGE);
-        HBox.setHgrow(ledOnButton, Priority.ALWAYS);
-        HBox.setHgrow(ledOffButton, Priority.ALWAYS);
-        ledOnButton.setMaxWidth(Double.MAX_VALUE);
-        ledOffButton.setMaxWidth(Double.MAX_VALUE);
-
-        HBox ledButtonRow = new HBox(10, ledOnButton, ledOffButton);
-        ledButtonRow.setAlignment(Pos.CENTER);
-
-        // Connection Indicator
-        espConnectionLed = new Circle(7);
-        espConnectionLed.setFill(Color.web("#ef4444"));
-        espConnectionLed.getStyleClass().add("led-offline");
-
-        espStatusLabel = new Label("Durum: Bağlantı Yok");
-        espStatusLabel.setStyle("-fx-text-fill: #cbd5e1; -fx-font-size: 13px;");
-
-        espLastCheckLabel = new Label("");
-        espLastCheckLabel.setStyle("-fx-text-fill: #64748b; -fx-font-size: 12px;");
-
-        Region statusSpacer = new Region();
-        HBox.setHgrow(statusSpacer, Priority.ALWAYS);
-
-        HBox statusRow = new HBox(8, espConnectionLed, espStatusLabel, statusSpacer, espLastCheckLabel);
-        statusRow.setAlignment(Pos.CENTER_LEFT);
-
-        frame.getChildren().addAll(
-                title,
-                createSmallLabel("ESP8266 IP Adresi ve Port"),
-                ipPortRow,
-                connectionButtonRow,
-                createSmallLabel("LED Kontrol Komutları"),
-                ledButtonRow,
-                statusRow
-        );
-
-        return frame;
-    }
-
     private void bindEspEvents() {
         espConnectButton.setOnAction(e -> {
             String ip = espIpField.getText().trim();
@@ -437,18 +428,7 @@ public class UIBuilder {
 
                 @Override
                 public void onResponseReceived(String response) {
-                    if (response.contains("OK LED ON")) {
-                        logManager.logEkle("ESP8266: LED başarıyla yakıldı.");
-                        setLedOnActive(true);
-                        updateLastCheckTime();
-                    } else if (response.contains("OK LED OFF")) {
-                        logManager.logEkle("ESP8266: LED başarıyla söndürüldü.");
-                        setLedOnActive(false);
-                        updateLastCheckTime();
-                    } else {
-                        logManager.logEkle("ESP8266 Yanıtı: " + response);
-                        resetLedButtons();
-                    }
+                    logManager.logEkle("ESP8266 Yanıtı: " + response);
                 }
 
                 @Override
@@ -464,46 +444,31 @@ public class UIBuilder {
             logManager.logEkle("ESP8266 WiFi bağlantısı kesildi.");
         });
 
-        ledOnButton.setOnAction(e -> {
-            espClientManager.sendLedCommand("1", new EspClientManager.ConnectionCallback() {
-                @Override
-                public void onConnectionStateChanged(boolean connected, String statusMessage) {
-                    updateEspControlStates(connected, false, statusMessage);
-                }
+        btnServo0.setOnAction(e -> sendServoAngle("0"));
+        btnServo90.setOnAction(e -> sendServoAngle("90"));
+        btnServo180.setOnAction(e -> sendServoAngle("180"));
+    }
 
-                @Override
-                public void onResponseReceived(String response) {
-                    if (response.contains("OK LED ON")) {
-                        logManager.logEkle("LED Başarıyla Yakıldı.");
-                        setLedOnActive(true);
-                        updateLastCheckTime();
-                    } else {
-                        logManager.logEkle("LED Yakma Başarısız: " + response);
-                        resetLedButtons();
-                    }
-                }
-            });
-        });
+    private void sendServoAngle(String angle) {
+        setServoButtonsDisable(true);
+        espClientManager.sendServoCommand(angle, new EspClientManager.ConnectionCallback() {
+            @Override
+            public void onConnectionStateChanged(boolean connected, String statusMessage) {
+                updateEspControlStates(connected, false, statusMessage);
+            }
 
-        ledOffButton.setOnAction(e -> {
-            espClientManager.sendLedCommand("0", new EspClientManager.ConnectionCallback() {
-                @Override
-                public void onConnectionStateChanged(boolean connected, String statusMessage) {
-                    updateEspControlStates(connected, false, statusMessage);
+            @Override
+            public void onResponseReceived(String response) {
+                setServoButtonsDisable(false);
+                if (response.contains("OK SERVO")) {
+                    double targetAngle = Double.parseDouble(angle);
+                    updateNeedle(targetAngle);
+                    updateServoButtonActiveState(targetAngle);
+                    updateLastCheckTime();
+                } else {
+                    logManager.logEkle("Servo Motor hareket hatası: " + response);
                 }
-
-                @Override
-                public void onResponseReceived(String response) {
-                    if (response.contains("OK LED OFF")) {
-                        logManager.logEkle("LED Başarıyla Söndürüldü.");
-                        setLedOnActive(false);
-                        updateLastCheckTime();
-                    } else {
-                        logManager.logEkle("LED Söndürme Başarısız: " + response);
-                        resetLedButtons();
-                    }
-                }
-            });
+            }
         });
     }
 
@@ -563,8 +528,7 @@ public class UIBuilder {
         espConnectButton.setDisable(connected || connecting);
         espDisconnectButton.setDisable(!connected && !connecting);
 
-        ledOnButton.setDisable(!connected);
-        ledOffButton.setDisable(!connected);
+        updateServoControlStates(connected);
 
         espStatusLabel.setText("Durum: " + statusText);
         if (statusLabel != null) {
@@ -572,10 +536,8 @@ public class UIBuilder {
         }
         if (!connected) {
             refreshLastCheckLabel();
+            resetServoButtons();
         }
-
-        // Manuel kontrol panelini WiFi durumuna göre güncelle
-        updateManualControlStates(connected);
 
         if (connected) {
             espConnectionLed.setFill(Color.web("#10b981"));
@@ -597,7 +559,6 @@ public class UIBuilder {
                 connectionLed.getStyleClass().remove("led-online");
                 connectionLed.getStyleClass().remove("led-offline");
             }
-            resetLedButtons();
         } else {
             espConnectionLed.setFill(Color.web("#ef4444"));
             espConnectionLed.getStyleClass().remove("led-online");
@@ -608,72 +569,58 @@ public class UIBuilder {
                 connectionLed.getStyleClass().remove("led-online");
                 connectionLed.getStyleClass().add("led-offline");
             }
-            resetLedButtons();
         }
     }
 
-    /**
-     * Manuel kontrol panelini WiFi bağlantı durumuna göre etkinleştirir/devre dışı bırakır.
-     * WiFi bağlı değilse: butonlar soluk ve tıklanamaz, uyarı etiketi görünür.
-     * WiFi bağlıysa: butonlar aktif, uyarı etiketi gizli.
-     */
-    private void updateManualControlStates(boolean wifiConnected) {
+    private void updateServoControlStates(boolean wifiConnected) {
         boolean disabled = !wifiConnected;
 
-        // DPAD butonlarını devre dışı bırak/etkinleştir
-        ileriButton.setDisable(disabled);
-        geriButton.setDisable(disabled);
-        solButton.setDisable(disabled);
-        sagButton.setDisable(disabled);
-        homeButton.setDisable(disabled);
+        btnServo0.setDisable(disabled);
+        btnServo90.setDisable(disabled);
+        btnServo180.setDisable(disabled);
 
-        // Radio butonlarını devre dışı bırak/etkinleştir
-        if (radioRowRef != null) {
-            for (javafx.scene.Node node : radioRowRef.getChildren()) {
-                node.setDisable(disabled);
-            }
+        if (servoWarningLabel != null) {
+            servoWarningLabel.setVisible(disabled);
+            servoWarningLabel.setManaged(disabled);
         }
 
-        // Uyarı etiketini göster/gizle
-        if (wifiWarningLabel != null) {
-            wifiWarningLabel.setVisible(disabled);
-            wifiWarningLabel.setManaged(disabled);
-        }
-
-        // Panel opacity'sini ayarla (disabled görünümü için ek ipucu)
-        if (dpadRef != null) {
-            dpadRef.setOpacity(disabled ? 0.45 : 1.0);
-        }
+        double opacity = disabled ? 0.35 : 1.0;
+        if (dialBackground != null) dialBackground.setOpacity(opacity);
+        if (valueArc != null) valueArc.setOpacity(opacity);
+        if (needle != null) needle.setOpacity(opacity);
+        if (centerPin != null) centerPin.setOpacity(opacity);
+        if (angleValueLabel != null) angleValueLabel.setOpacity(opacity);
     }
 
-    private void setLedOnActive(boolean active) {
-        if (active) {
-            ledOnButton.getStyleClass().removeAll("btn-green", "btn-green-active");
-            ledOnButton.getStyleClass().add("btn-green-active");
-
-            ledOffButton.getStyleClass().removeAll("btn-orange", "btn-orange-active");
-            ledOffButton.getStyleClass().add("btn-orange");
-        } else {
-            ledOnButton.getStyleClass().removeAll("btn-green", "btn-green-active");
-            ledOnButton.getStyleClass().add("btn-green");
-
-            ledOffButton.getStyleClass().removeAll("btn-orange", "btn-orange-active");
-            ledOffButton.getStyleClass().add("btn-orange-active");
-        }
+    private VBox createCard() {
+        VBox frame = new VBox(15);
+        frame.setPadding(new Insets(20));
+        frame.setAlignment(Pos.CENTER);
+        frame.getStyleClass().add("card");
+        return frame;
     }
 
-    private void resetLedButtons() {
-        ledOnButton.getStyleClass().removeAll("btn-green", "btn-green-active");
-        ledOnButton.getStyleClass().add("btn-green");
+    private Label createTitle(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("title");
+        return label;
+    }
 
-        ledOffButton.getStyleClass().removeAll("btn-orange", "btn-orange-active");
-        ledOffButton.getStyleClass().add("btn-orange");
+    private Label createSmallLabel(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("label-small");
+        return label;
+    }
+
+    private Button createButton(String text, String colorClass) {
+        Button button = new Button(text);
+        button.getStyleClass().addAll("button", colorClass);
+        button.setPrefWidth(170);
+        button.setPrefHeight(42);
+        return button;
     }
 
     public void cleanup() {
-        if (serialManager != null) {
-            serialManager.disconnect();
-        }
         if (espClientManager != null) {
             espClientManager.disconnect();
         }
