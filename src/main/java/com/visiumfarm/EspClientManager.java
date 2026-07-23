@@ -178,7 +178,7 @@ public class EspClientManager {
         }
     }
 
-    public void sendLedCommand(String command, ConnectionCallback callback) {
+    public void sendCommand(String command, ConnectionCallback callback) {
         if (!isConnected()) {
             logManager.logEkle("Hata: Komut gönderilemedi! ESP8266 bağlantısı yok.");
             return;
@@ -202,27 +202,16 @@ public class EspClientManager {
         }).start();
     }
 
-    public void sendServoCommand(String angle, ConnectionCallback callback) {
-        if (!isConnected()) {
-            logManager.logEkle("Hata: Komut gönderilemedi! ESP8266 bağlantısı yok.");
-            return;
-        }
-
-        new Thread(() -> {
-            try {
-                String cmd = "SERVO" + angle;
-                logManager.logEkle("ESP8266'ya servo komutu gönderiliyor -> " + cmd);
-                String response = sendAndReceive(cmd);
-                logManager.logEkle("ESP8266'dan yanıt geldi -> " + response);
-                Platform.runLater(() -> callback.onResponseReceived(response));
-            } catch (Exception e) {
-                logManager.logEkle("Hata: ESP8266 servo komutu gönderme hatası. " + e.getMessage());
-                handleDisconnection("Bağlantı Koptu");
-                Platform.runLater(() -> {
-                    callback.onResponseReceived("HATA: " + e.getMessage());
-                    callback.onConnectionStateChanged(false, "Bağlantı Koptu");
-                });
-            }
-        }).start();
+    /**
+     * Sends a command and blocks the CALLING thread until the response arrives.
+     * Intended for use from a dedicated background thread (e.g. the servo test
+     * loop), never from the JavaFX Application thread. Thread-safe with the
+     * heartbeat because sendAndReceive serialises on socketLock.
+     */
+    public String sendCommandBlocking(String command) throws IOException {
+        logManager.logEkle("ESP8266'ya komut gönderiliyor -> " + command);
+        String response = sendAndReceive(command);
+        logManager.logEkle("ESP8266'dan yanıt geldi -> " + response);
+        return response;
     }
 }
