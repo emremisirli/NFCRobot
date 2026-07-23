@@ -55,8 +55,9 @@ public class UIBuilder {
     // Servo pozisyonlari ve test zamanlamasi
     private static final double HOME_ANGLE = 90;
     private static final double TARGET_ANGLE = 180;
-    private static final long TARGET_HOLD_MS = 3000; // hedefte bekleme suresi
-    private static final long SETTLE_MS = 800;       // her hareket sonrasi oturma suresi
+    private static final long TARGET_HOLD_MS = 4500; // hedefte bekleme suresi (3.0 + 1.5 sn)
+    private static final long HOME_HOLD_MS = 1500;   // donguler arasi HOME'da bekleme suresi
+    private static final long SETTLE_MS = 800;       // ilk HOME hareketi sonrasi oturma suresi
 
     public BorderPane build() {
         BorderPane root = new BorderPane();
@@ -524,10 +525,10 @@ public class UIBuilder {
                     Platform.runLater(() -> testStatusLabel.setText("Test döngüsü: " + cycle + " / " + n));
 
                     testMove("TARGET", TARGET_ANGLE);
-                    if (!sleepTest(TARGET_HOLD_MS)) return;   // hedefte 3 sn bekle
+                    if (!sleepTest(TARGET_HOLD_MS)) return;   // hedefte bekle (4.5 sn)
 
                     testMove("HOME", HOME_ANGLE);
-                    if (!sleepTest(SETTLE_MS)) return;
+                    if (!sleepTest(HOME_HOLD_MS)) return;      // sonraki donguden once HOME'da bekle
 
                     logManager.logEkle("Test döngüsü tamamlandı: " + cycle + " / " + n);
                 }
