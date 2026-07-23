@@ -16,6 +16,7 @@ const float txPowerDbm = 16.0;
 // TCP komut sunucusu
 WiFiServer server(5000);
 
+const int servoLedPin = D5; // Amica'da D5 = GPIO14
 const unsigned long servoLedDurationMs = 1500;
 unsigned long servoLedOffAt = 0;
 bool servoLedActive = false;
@@ -33,8 +34,8 @@ void setup() {
   */
   Serial1.begin(115200);
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH); // Amica'da HIGH = LED sonuk (baslangic durumu)
+  pinMode(servoLedPin, OUTPUT);
+  digitalWrite(servoLedPin, LOW); // harici LED: LOW = sonuk (baslangic durumu)
 
   WiFi.persistent(false);          // AP ayarlarini flash'a yazma
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
@@ -55,14 +56,14 @@ void setup() {
 }
 
 void startServoLedPulse() {
-  digitalWrite(LED_BUILTIN, LOW); // Amica'da LOW = LED yanik
+  digitalWrite(servoLedPin, HIGH); // harici LED: HIGH = yanik
   servoLedOffAt = millis() + servoLedDurationMs;
   servoLedActive = true;
 }
 
 void updateServoLed() {
   if (servoLedActive && (long)(millis() - servoLedOffAt) >= 0) {
-    digitalWrite(LED_BUILTIN, HIGH); // LED sonuk
+    digitalWrite(servoLedPin, LOW); // LED sonuk
     servoLedActive = false;
   }
 }
@@ -70,18 +71,14 @@ void updateServoLed() {
 void handleCommand(WiFiClient& client, String cmd) {
   cmd.trim();
 
-  if (cmd == "SERVO0") {
-    Serial.write('A'); // STM32'ye ilet (servo 0 derece)
+  if (cmd == "HOME") {
+    Serial.write('B'); // STM32'ye ilet (servo HOME = 90 derece)
     startServoLedPulse();
-    client.println("OK SERVO 0");
-  } else if (cmd == "SERVO90") {
-    Serial.write('B'); // STM32'ye ilet (servo 90 derece)
+    client.println("OK HOME");
+  } else if (cmd == "TARGET") {
+    Serial.write('C'); // STM32'ye ilet (servo TARGET = 180 derece)
     startServoLedPulse();
-    client.println("OK SERVO 90");
-  } else if (cmd == "SERVO180") {
-    Serial.write('C'); // STM32'ye ilet (servo 180 derece)
-    startServoLedPulse();
-    client.println("OK SERVO 180");
+    client.println("OK TARGET");
   } else if (cmd == "PING") {
     client.println("PONG"); // masaustu tarafi baglantiyi canli tutmak/dogrulamak icin kullanir
   } else if (cmd.length() > 0) {

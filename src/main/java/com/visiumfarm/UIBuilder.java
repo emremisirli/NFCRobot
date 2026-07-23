@@ -33,9 +33,8 @@ public class UIBuilder {
     private Timeline lastCheckTimeline;
 
     // Servo Kontrol Bileşenleri
-    private Button btnServo0;
-    private Button btnServo90;
-    private Button btnServo180;
+    private Button btnHome;
+    private Button btnTarget;
     private Arc dialBackground;
     private Arc valueArc;
     private Line needle;
@@ -43,6 +42,21 @@ public class UIBuilder {
     private Label angleValueLabel;
     private Label servoWarningLabel;
     private VBox servoControlPanelRef;
+
+    // Test (N tekrar) bileşenleri
+    private TextField nField;
+    private Button btnStartTest;
+    private Button btnStopTest;
+    private Label testStatusLabel;
+
+    private volatile boolean testRunning = false;
+    private Thread testThread;
+
+    // Servo pozisyonlari ve test zamanlamasi
+    private static final double HOME_ANGLE = 90;
+    private static final double TARGET_ANGLE = 180;
+    private static final long TARGET_HOLD_MS = 3000; // hedefte bekleme suresi
+    private static final long SETTLE_MS = 800;       // her hareket sonrasi oturma suresi
 
     public BorderPane build() {
         BorderPane root = new BorderPane();
@@ -95,22 +109,15 @@ public class UIBuilder {
                     switch (event.getCode()) {
                         case DIGIT1:
                         case NUMPAD1:
-                            if (btnServo0 != null && !btnServo0.isDisable()) {
-                                btnServo0.fire();
+                            if (btnHome != null && !btnHome.isDisable()) {
+                                btnHome.fire();
                             }
                             event.consume();
                             break;
                         case DIGIT2:
                         case NUMPAD2:
-                            if (btnServo90 != null && !btnServo90.isDisable()) {
-                                btnServo90.fire();
-                            }
-                            event.consume();
-                            break;
-                        case DIGIT3:
-                        case NUMPAD3:
-                            if (btnServo180 != null && !btnServo180.isDisable()) {
-                                btnServo180.fire();
+                            if (btnTarget != null && !btnTarget.isDisable()) {
+                                btnTarget.fire();
                             }
                             event.consume();
                             break;
@@ -264,28 +271,45 @@ public class UIBuilder {
         VBox gaugeBox = new VBox(5, gaugePane, angleValueLabel);
         gaugeBox.setAlignment(Pos.CENTER);
 
-        // Açı Butonları
-        btnServo0 = createButton("0° - Başlangıç", Theme.DARK_BUTTON);
-        btnServo90 = createButton("90° - Dikey", Theme.DARK_BUTTON);
-        btnServo180 = createButton("180° - Bitiş", Theme.DARK_BUTTON);
+        // Pozisyon Butonları (yalnizca HOME ve TARGET)
+        btnHome = createButton("HOME (90°)", Theme.DARK_BUTTON);
+        btnTarget = createButton("TARGET (180°)", Theme.DARK_BUTTON);
 
-        btnServo0.setPrefWidth(125);
-        btnServo90.setPrefWidth(125);
-        btnServo180.setPrefWidth(125);
+        btnHome.setPrefWidth(190);
+        btnTarget.setPrefWidth(190);
 
-        HBox servoButtonsRow = new HBox(10, btnServo0, btnServo90, btnServo180);
+        HBox servoButtonsRow = new HBox(10, btnHome, btnTarget);
         servoButtonsRow.setAlignment(Pos.CENTER);
+
+        // Test (N tekrar) satiri
+        nField = new TextField("5");
+        nField.setPromptText("N");
+        nField.setPrefWidth(70);
+
+        btnStartTest = createButton("TESTİ BAŞLAT", Theme.BLUE);
+        btnStopTest = createButton("DURDUR", Theme.RED);
+        btnStartTest.setPrefWidth(150);
+        btnStopTest.setPrefWidth(110);
+
+        HBox testRow = new HBox(10, nField, btnStartTest, btnStopTest);
+        testRow.setAlignment(Pos.CENTER);
+
+        testStatusLabel = new Label("");
+        testStatusLabel.setStyle("-fx-text-fill: #38bdf8; -fx-font-size: 13px; -fx-font-weight: bold;");
 
         frame.getChildren().addAll(
                 title,
                 servoWarningLabel,
                 gaugeBox,
-                createSmallLabel("Açı Seçimi"),
-                servoButtonsRow
+                createSmallLabel("Pozisyon Seçimi"),
+                servoButtonsRow,
+                createSmallLabel("Otomatik Test (HOME → TARGET → 3sn bekle → HOME, N kez)"),
+                testRow,
+                testStatusLabel
         );
 
         // Varsayılan gösterge açısını ayarla
-        updateNeedle(90);
+        updateNeedle(HOME_ANGLE);
 
         return frame;
     }
@@ -305,41 +329,33 @@ public class UIBuilder {
 
     private void updateServoButtonActiveState(double angle) {
         // Tüm butonları varsayılan koyu temaya sıfırla
-        btnServo0.getStyleClass().removeAll("btn-blue-active", "btn-dark");
-        btnServo90.getStyleClass().removeAll("btn-blue-active", "btn-dark");
-        btnServo180.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+        btnHome.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+        btnTarget.getStyleClass().removeAll("btn-blue-active", "btn-dark");
 
-        btnServo0.getStyleClass().add("btn-dark");
-        btnServo90.getStyleClass().add("btn-dark");
-        btnServo180.getStyleClass().add("btn-dark");
+        btnHome.getStyleClass().add("btn-dark");
+        btnTarget.getStyleClass().add("btn-dark");
 
         // Seçilen butona aktif sınıfını uygula
-        if (angle == 0) {
-            btnServo0.getStyleClass().remove("btn-dark");
-            btnServo0.getStyleClass().add("btn-blue-active");
-        } else if (angle == 90) {
-            btnServo90.getStyleClass().remove("btn-dark");
-            btnServo90.getStyleClass().add("btn-blue-active");
-        } else if (angle == 180) {
-            btnServo180.getStyleClass().remove("btn-dark");
-            btnServo180.getStyleClass().add("btn-blue-active");
+        if (angle == HOME_ANGLE) {
+            btnHome.getStyleClass().remove("btn-dark");
+            btnHome.getStyleClass().add("btn-blue-active");
+        } else if (angle == TARGET_ANGLE) {
+            btnTarget.getStyleClass().remove("btn-dark");
+            btnTarget.getStyleClass().add("btn-blue-active");
         }
     }
 
     private void resetServoButtons() {
-        btnServo0.getStyleClass().removeAll("btn-blue-active", "btn-dark");
-        btnServo90.getStyleClass().removeAll("btn-blue-active", "btn-dark");
-        btnServo180.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+        btnHome.getStyleClass().removeAll("btn-blue-active", "btn-dark");
+        btnTarget.getStyleClass().removeAll("btn-blue-active", "btn-dark");
 
-        btnServo0.getStyleClass().add("btn-dark");
-        btnServo90.getStyleClass().add("btn-dark");
-        btnServo180.getStyleClass().add("btn-dark");
+        btnHome.getStyleClass().add("btn-dark");
+        btnTarget.getStyleClass().add("btn-dark");
     }
 
     private void setServoButtonsDisable(boolean disable) {
-        btnServo0.setDisable(disable);
-        btnServo90.setDisable(disable);
-        btnServo180.setDisable(disable);
+        btnHome.setDisable(disable);
+        btnTarget.setDisable(disable);
     }
 
     private VBox createLogPanel() {
@@ -444,14 +460,15 @@ public class UIBuilder {
             logManager.logEkle("ESP8266 WiFi bağlantısı kesildi.");
         });
 
-        btnServo0.setOnAction(e -> sendServoAngle("0"));
-        btnServo90.setOnAction(e -> sendServoAngle("90"));
-        btnServo180.setOnAction(e -> sendServoAngle("180"));
+        btnHome.setOnAction(e -> sendManualMove("HOME", HOME_ANGLE));
+        btnTarget.setOnAction(e -> sendManualMove("TARGET", TARGET_ANGLE));
+        btnStartTest.setOnAction(e -> startTest());
+        btnStopTest.setOnAction(e -> stopTest());
     }
 
-    private void sendServoAngle(String angle) {
+    private void sendManualMove(String command, double angle) {
         setServoButtonsDisable(true);
-        espClientManager.sendServoCommand(angle, new EspClientManager.ConnectionCallback() {
+        espClientManager.sendCommand(command, new EspClientManager.ConnectionCallback() {
             @Override
             public void onConnectionStateChanged(boolean connected, String statusMessage) {
                 updateEspControlStates(connected, false, statusMessage);
@@ -460,16 +477,121 @@ public class UIBuilder {
             @Override
             public void onResponseReceived(String response) {
                 setServoButtonsDisable(false);
-                if (response.contains("OK SERVO")) {
-                    double targetAngle = Double.parseDouble(angle);
-                    updateNeedle(targetAngle);
-                    updateServoButtonActiveState(targetAngle);
+                if (response.startsWith("OK")) {
+                    updateNeedle(angle);
+                    updateServoButtonActiveState(angle);
                     updateLastCheckTime();
                 } else {
                     logManager.logEkle("Servo Motor hareket hatası: " + response);
                 }
             }
         });
+    }
+
+    private void startTest() {
+        if (testRunning) {
+            return;
+        }
+        if (!espClientManager.isConnected()) {
+            logManager.logEkle("Hata: Test başlatılamadı! ESP8266 bağlantısı yok.");
+            return;
+        }
+
+        final int n;
+        try {
+            n = Integer.parseInt(nField.getText().trim());
+        } catch (NumberFormatException ex) {
+            logManager.logEkle("Hata: Geçersiz tekrar sayısı (N). Bir tam sayı girin.");
+            return;
+        }
+        if (n < 1) {
+            logManager.logEkle("Hata: Tekrar sayısı (N) en az 1 olmalıdır.");
+            return;
+        }
+
+        testRunning = true;
+        setTestUiRunning(true);
+        logManager.logEkle("Otomatik test başladı. Tekrar sayısı N=" + n);
+
+        testThread = new Thread(() -> {
+            try {
+                // Teste HOME pozisyonundan başla
+                testMove("HOME", HOME_ANGLE);
+                if (!sleepTest(SETTLE_MS)) return;
+
+                for (int i = 1; i <= n && testRunning; i++) {
+                    final int cycle = i;
+                    Platform.runLater(() -> testStatusLabel.setText("Test döngüsü: " + cycle + " / " + n));
+
+                    testMove("TARGET", TARGET_ANGLE);
+                    if (!sleepTest(TARGET_HOLD_MS)) return;   // hedefte 3 sn bekle
+
+                    testMove("HOME", HOME_ANGLE);
+                    if (!sleepTest(SETTLE_MS)) return;
+
+                    logManager.logEkle("Test döngüsü tamamlandı: " + cycle + " / " + n);
+                }
+
+                if (testRunning) {
+                    logManager.logEkle("Otomatik test tamamlandı (" + n + " döngü).");
+                }
+            } catch (java.io.IOException ex) {
+                logManager.logEkle("Test hatası: " + ex.getMessage());
+            } finally {
+                testRunning = false;
+                Platform.runLater(() -> setTestUiRunning(false));
+            }
+        }, "Servo-Test-Thread");
+        testThread.setDaemon(true);
+        testThread.start();
+    }
+
+    private void stopTest() {
+        if (testRunning) {
+            testRunning = false;
+            logManager.logEkle("Otomatik test kullanıcı tarafından durduruldu.");
+        }
+    }
+
+    // Test thread'inden cagrilir: komut gonderir ve gostergeyi gunceller.
+    private void testMove(String command, double angle) throws java.io.IOException {
+        String response = espClientManager.sendCommandBlocking(command);
+        if (!response.startsWith("OK")) {
+            throw new java.io.IOException("Beklenmeyen yanıt: " + response);
+        }
+        Platform.runLater(() -> {
+            updateNeedle(angle);
+            updateServoButtonActiveState(angle);
+            updateLastCheckTime();
+        });
+    }
+
+    // testRunning false olursa erken cikar; durdurulabilir bekleme. false donerse test iptal.
+    private boolean sleepTest(long ms) {
+        long end = System.currentTimeMillis() + ms;
+        while (System.currentTimeMillis() < end) {
+            if (!testRunning) {
+                return false;
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException ex) {
+                return false;
+            }
+        }
+        return testRunning;
+    }
+
+    private void setTestUiRunning(boolean running) {
+        boolean connected = espClientManager != null && espClientManager.isConnected();
+        btnHome.setDisable(running || !connected);
+        btnTarget.setDisable(running || !connected);
+        nField.setDisable(running || !connected);
+        btnStartTest.setDisable(running || !connected);
+        btnStopTest.setDisable(!running);
+        if (!running) {
+            testStatusLabel.setText("");
+        }
     }
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
@@ -573,15 +695,17 @@ public class UIBuilder {
     }
 
     private void updateServoControlStates(boolean wifiConnected) {
-        boolean disabled = !wifiConnected;
+        boolean disabled = !wifiConnected || testRunning;
 
-        btnServo0.setDisable(disabled);
-        btnServo90.setDisable(disabled);
-        btnServo180.setDisable(disabled);
+        btnHome.setDisable(disabled);
+        btnTarget.setDisable(disabled);
+        if (nField != null) nField.setDisable(disabled);
+        if (btnStartTest != null) btnStartTest.setDisable(disabled);
+        if (btnStopTest != null) btnStopTest.setDisable(!testRunning);
 
         if (servoWarningLabel != null) {
-            servoWarningLabel.setVisible(disabled);
-            servoWarningLabel.setManaged(disabled);
+            servoWarningLabel.setVisible(!wifiConnected);
+            servoWarningLabel.setManaged(!wifiConnected);
         }
 
         double opacity = disabled ? 0.35 : 1.0;
@@ -621,6 +745,7 @@ public class UIBuilder {
     }
 
     public void cleanup() {
+        testRunning = false;
         if (espClientManager != null) {
             espClientManager.disconnect();
         }
